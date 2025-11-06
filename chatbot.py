@@ -189,10 +189,10 @@ def criar_llm():
     else:  # OpenAI (padrão)
         try:
             from langchain_openai import ChatOpenAI
-            api_key = os.getenv("OPENAI_API_KEY")
+            api_key = get_secret("OPENAI_API_KEY")
             if not api_key:
-                raise ValueError("OPENAI_API_KEY não encontrada no arquivo .env")
-            model_name = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+                raise ValueError("OPENAI_API_KEY não encontrada. Configure nos Secrets do Streamlit Cloud ou no arquivo .env")
+            model_name = get_secret("OPENAI_MODEL", "gpt-3.5-turbo")
             print(f"Usando OpenAI com modelo: {model_name}")
             return ChatOpenAI(model=model_name, temperature=0)
         except ImportError:
