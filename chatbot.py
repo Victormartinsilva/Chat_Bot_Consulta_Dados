@@ -3,14 +3,34 @@ import pandas as pd
 from dotenv import load_dotenv
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
 
-# Carrega as variáveis de ambiente do arquivo .env
+# Tenta importar streamlit para usar secrets (se disponível)
+try:
+    import streamlit as st
+    STREAMLIT_AVAILABLE = True
+except:
+    STREAMLIT_AVAILABLE = False
+
+# Carrega as variáveis de ambiente do arquivo .env (apenas localmente)
 load_dotenv()
+
+# Função para obter secrets (suporta Streamlit Cloud e .env local)
+def get_secret(key, default=None):
+    """Obtém secret do Streamlit Cloud ou variável de ambiente local"""
+    if STREAMLIT_AVAILABLE:
+        try:
+            # Tenta obter do Streamlit secrets primeiro (Streamlit Cloud)
+            if hasattr(st, 'secrets') and key in st.secrets:
+                return st.secrets[key]
+        except:
+            pass
+    # Fallback para variável de ambiente (.env local)
+    return os.getenv(key, default)
 
 # O nome do arquivo CSV foi padronizado para 'data.csv' na fase 1
 CSV_FILE_PATH = "data.csv"
 
 # Configuração do provedor LLM (openai, ollama, gemini)
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower()
+LLM_PROVIDER = get_secret("LLM_PROVIDER", "openai").lower()
 
 def criar_llm():
     """
@@ -20,8 +40,8 @@ def criar_llm():
     if LLM_PROVIDER == "ollama":
         try:
             from langchain_community.llms import Ollama
-            model_name = os.getenv("OLLAMA_MODEL", "llama3.2")  # Modelo padrão
-            base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+            model_name = get_secret("OLLAMA_MODEL", "llama3.2")  # Modelo padrão
+            base_url = get_secret("OLLAMA_BASE_URL", "http://localhost:11434")
             print(f"Usando Ollama com modelo: {model_name}")
             # Ollama usa LLM (não ChatLLM) para compatibilidade com create_pandas_dataframe_agent
             return Ollama(model=model_name, base_url=base_url, temperature=0)
@@ -38,11 +58,11 @@ def criar_llm():
             from typing import Optional, List, Any
             import google.generativeai as genai
             
-            api_key = os.getenv("GOOGLE_API_KEY")
+            api_key = get_secret("GOOGLE_API_KEY")
             if not api_key:
-                raise ValueError("GOOGLE_API_KEY não encontrada no arquivo .env")
+                raise ValueError("GOOGLE_API_KEY não encontrada. Configure nos Secrets do Streamlit Cloud ou no arquivo .env")
             
-            model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+            model_name = get_secret("GEMINI_MODEL", "gemini-2.5-flash")
             
             # Configura o Google Generative AI
             genai.configure(api_key=api_key)

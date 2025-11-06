@@ -22,21 +22,35 @@ st.markdown(
     """
 )
 
+# Função para obter secrets (suporta Streamlit Cloud e .env local)
+def get_secret(key, default=None):
+    """Obtém secret do Streamlit Cloud ou variável de ambiente local"""
+    try:
+        # Tenta obter do Streamlit secrets primeiro (Streamlit Cloud)
+        if hasattr(st, 'secrets') and key in st.secrets:
+            return st.secrets[key]
+    except:
+        pass
+    # Fallback para variável de ambiente (.env local)
+    return os.getenv(key, default)
+
 # Mostra qual provedor está sendo usado
-llm_provider = os.getenv("LLM_PROVIDER", "openai").upper()
+llm_provider = get_secret("LLM_PROVIDER", "openai").upper()
 st.info(f"🔧 Provedor LLM configurado: **{llm_provider}**")
 
 # --- Carregamento e Exibição do DataFrame ---
 CSV_FILE_PATH = "data.csv"
 # Suporte para CSV via URL (útil para Streamlit Cloud)
-CSV_URL = os.getenv("CSV_URL", None)
+CSV_URL = get_secret("CSV_URL", None)
 
 try:
     # Tenta carregar de URL primeiro (para Streamlit Cloud), depois do arquivo local
     if CSV_URL:
         df = pd.read_csv(CSV_URL)
+        st.success(f"✅ CSV carregado de URL: {CSV_URL}")
     else:
         df = pd.read_csv(CSV_FILE_PATH)
+        st.success(f"✅ CSV carregado do arquivo local: {CSV_FILE_PATH}")
     st.subheader("Amostra do DataFrame Carregado")
     st.dataframe(df.head())
     st.info(f"DataFrame carregado com sucesso: {df.shape[0]} linhas e {df.shape[1]} colunas.")
@@ -109,10 +123,10 @@ if prompt := st.chat_input("Digite sua pergunta sobre os dados..."):
         st.session_state.raciocinios[indice_resposta] = raciocinio
 
 # --- Aviso sobre a Chave da API ---
-llm_provider = os.getenv("LLM_PROVIDER", "openai").lower()
-if llm_provider == "openai" and not os.getenv("OPENAI_API_KEY"):
-    st.warning("⚠️ A chave `OPENAI_API_KEY` não foi encontrada. Certifique-se de que ela está definida no arquivo `.env`")
-elif llm_provider == "gemini" and not os.getenv("GOOGLE_API_KEY"):
-    st.warning("⚠️ A chave `GOOGLE_API_KEY` não foi encontrada. Obtenha uma em: https://makersuite.google.com/app/apikey")
+llm_provider = get_secret("LLM_PROVIDER", "openai").lower()
+if llm_provider == "openai" and not get_secret("OPENAI_API_KEY"):
+    st.warning("⚠️ A chave `OPENAI_API_KEY` não foi encontrada. Configure nos Secrets do Streamlit Cloud ou no arquivo `.env`")
+elif llm_provider == "gemini" and not get_secret("GOOGLE_API_KEY"):
+    st.warning("⚠️ A chave `GOOGLE_API_KEY` não foi encontrada. Configure nos Secrets do Streamlit Cloud ou obtenha uma em: https://makersuite.google.com/app/apikey")
 elif llm_provider == "ollama":
     st.info("✅ Usando Ollama (gratuito). Certifique-se de que o Ollama está rodando: `ollama serve`")
