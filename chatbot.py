@@ -1,265 +1,378 @@
-import logging
-import random
-import re
-from difflib import SequenceMatcher
-import json
+import os
+import pandas as pd
+from dotenv import load_dotenv
+from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
 
-# Configura o logging para depuração
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+# Carrega as variáveis de ambiente do arquivo .env
+load_dotenv()
 
-logging.info("Sistema de respostas inteligentes carregado com sucesso.")
+# O nome do arquivo CSV foi padronizado para 'data.csv' na fase 1
+CSV_FILE_PATH = "data.csv"
 
-# Limite do histórico para manter o contexto controlado
-MAX_CONTEXT_LENGTH = 1000
+# Configuração do provedor LLM (openai, ollama, gemini)
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower()
 
-# Base de conhecimento específica para governança de dados
-BASE_CONHECIMENTO = {
-    "lgpd": {
-        "palavras_chave": ["lgpd", "lei geral de proteção", "proteção de dados", "privacidade", "consentimento"],
-        "respostas": [
-            "A LGPD (Lei Geral de Proteção de Dados) estabelece regras sobre coleta, armazenamento e uso de dados pessoais. Principais pontos: consentimento explícito, finalidade específica, minimização de dados e direito ao esquecimento.",
-            "Para compliance com LGPD: mapeie todos os dados pessoais, implemente controles de acesso, documente finalidades, obtenha consentimento válido e estabeleça processo de resposta a incidentes.",
-            "LGPD exige: registro de atividades de tratamento, análise de impacto à proteção de dados (AIPD), nomeação de encarregado de dados e políticas de privacidade claras."
-        ]
-    },
-    "qualidade_dados": {
-        "palavras_chave": ["qualidade", "duplicado", "inconsistente", "completo", "preciso", "atualizado", "limpeza"],
-        "respostas": [
-            "Qualidade de dados envolve: precisão (dados corretos), completude (sem campos vazios), consistência (formato padronizado), atualidade (dados recentes) e validade (conformidade com regras).",
-            "Para melhorar qualidade: implemente validação na entrada, regras de negócio claras, monitoramento contínuo, processos de limpeza e padronização de formatos.",
-            "Indicadores de qualidade: taxa de duplicação <5%, completude >95%, precisão >98%, tempo de atualização <24h e conformidade com padrões estabelecidos."
-        ]
-    },
-    "seguranca": {
-        "palavras_chave": ["segurança", "seguranca", "acesso", "criptografia", "auditoria", "controle", "permissões", "permissões", "proteção", "protecao"],
-        "respostas": [
-            "Segurança de dados requer: classificação por sensibilidade, controle de acesso baseado em roles (RBAC), criptografia em trânsito e repouso, monitoramento e auditoria contínua.",
-            "Implemente: autenticação multifator, princípio do menor privilégio, logs de auditoria detalhados, backup seguro e plano de resposta a incidentes.",
-            "Controles essenciais: firewalls, antivírus, patches de segurança, treinamento da equipe e testes de penetração regulares."
-        ]
-    },
-    "governanca": {
-        "palavras_chave": ["governança", "governanca", "política", "politica", "framework", "estrutura", "responsabilidade", "processo", "implementar", "implementação"],
-        "respostas": [
-            "Governança de dados inclui: estrutura organizacional (comitê, responsáveis), políticas e procedimentos, tecnologias de suporte e métricas de monitoramento.",
-            "Framework de governança: defina responsabilidades (data owner, steward, custodian), estabeleça políticas claras, implemente controles e monitore compliance.",
-            "Elementos essenciais: catálogo de dados, linhagem de dados, classificação, qualidade, segurança e lifecycle management."
-        ]
-    },
-    "compliance": {
-        "palavras_chave": ["compliance", "auditoria", "regulamentação", "conformidade", "norma"],
-        "respostas": [
-            "Compliance requer: documentação completa de processos, controles internos efetivos, auditorias regulares, treinamento contínuo e correção de não-conformidades.",
-            "Para auditoria: mantenha logs detalhados, documente políticas, implemente controles de acesso, monitore atividades e prepare evidências de conformidade.",
-            "Regulamentações importantes: LGPD, GDPR, SOX, Basel III. Cada uma tem requisitos específicos de documentação, controles e monitoramento."
-        ]
-    },
-    "catalogacao": {
-        "palavras_chave": ["catálogo", "catalogação", "inventário", "metadados", "linhagem", "mapeamento"],
-        "respostas": [
-            "Catálogo de dados deve incluir: nome, descrição, tipo, formato, localização, proprietário, qualidade, uso e linhagem de cada ativo de dados.",
-            "Metadados essenciais: técnicos (tipo, tamanho, formato), de negócio (significado, uso), operacionais (frequência de atualização) e de qualidade (completude, precisão).",
-            "Linhagem de dados mostra: origem, transformações, destino e dependências. Fundamental para auditoria, debugging e impacto de mudanças."
-        ]
-    }
-}
-
-def limpar_contexto(contexto):
-    """Garante que o histórico de contexto não ultrapasse o limite."""
-    return contexto[-MAX_CONTEXT_LENGTH:] if len(contexto) > MAX_CONTEXT_LENGTH else contexto
-
-def calcular_similaridade(texto1, texto2):
-    """Calcula a similaridade entre dois textos usando SequenceMatcher."""
-    return SequenceMatcher(None, texto1.lower(), texto2.lower()).ratio()
-
-def encontrar_topicos_relevantes(mensagem):
-    """Encontra tópicos relevantes na mensagem usando busca semântica."""
-    mensagem_lower = mensagem.lower()
-    topicos_encontrados = []
+def criar_llm():
+    """
+    Cria e retorna o LLM baseado no provedor configurado.
+    Suporta: OpenAI, Ollama (gratuito/local), Google Gemini (gratuito)
+    """
+    if LLM_PROVIDER == "ollama":
+        try:
+            from langchain_community.llms import Ollama
+            model_name = os.getenv("OLLAMA_MODEL", "llama3.2")  # Modelo padrão
+            base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+            print(f"Usando Ollama com modelo: {model_name}")
+            # Ollama usa LLM (não ChatLLM) para compatibilidade com create_pandas_dataframe_agent
+            return Ollama(model=model_name, base_url=base_url, temperature=0)
+        except ImportError:
+            raise ImportError("Para usar Ollama, instale: pip install langchain-community")
+        except Exception as e:
+            raise Exception(f"Erro ao conectar com Ollama. Certifique-se de que o Ollama está rodando em {base_url}. Erro: {e}")
     
-    for topico, info in BASE_CONHECIMENTO.items():
-        for palavra_chave in info["palavras_chave"]:
-            # Busca exata
-            if palavra_chave in mensagem_lower:
-                topicos_encontrados.append((topico, 1.0))
-                break
-            # Busca por similaridade
-            elif calcular_similaridade(mensagem_lower, palavra_chave) > 0.6:
-                topicos_encontrados.append((topico, calcular_similaridade(mensagem_lower, palavra_chave)))
-                break
+    elif LLM_PROVIDER == "gemini":
+        try:
+            # Usa google-generativeai diretamente com wrapper customizado
+            from langchain_core.language_models.llms import LLM
+            from langchain_core.callbacks.manager import CallbackManagerForLLMRun
+            from typing import Optional, List, Any
+            import google.generativeai as genai
+            
+            api_key = os.getenv("GOOGLE_API_KEY")
+            if not api_key:
+                raise ValueError("GOOGLE_API_KEY não encontrada no arquivo .env")
+            
+            model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+            
+            # Configura o Google Generative AI
+            genai.configure(api_key=api_key)
+            
+            print(f"Usando Google Gemini com modelo: {model_name}")
+            
+            # Cria um wrapper LLM customizado para compatibilidade com LangChain
+            class GeminiLLM(LLM):
+                gemini_model_name: str = ""
+                gemini_api_key: str = ""
+                model: Any = None
+                
+                def __init__(self, gemini_model_name: str = "", gemini_api_key: str = "", **kwargs):
+                    # Remove os parâmetros customizados antes de passar para super()
+                    filtered_kwargs = {k: v for k, v in kwargs.items() if k not in ['gemini_model_name', 'gemini_api_key']}
+                    super().__init__(**filtered_kwargs)
+                    
+                    # Define os valores do modelo e API key
+                    self.gemini_model_name = gemini_model_name or model_name
+                    self.gemini_api_key = gemini_api_key or api_key
+                    
+                    # Configura e cria o modelo
+                    genai.configure(api_key=self.gemini_api_key)
+                    try:
+                        self.model = genai.GenerativeModel(self.gemini_model_name)
+                    except Exception as e:
+                        # Se falhar, tenta listar modelos disponíveis
+                        try:
+                            available = [m.name.replace('models/', '') for m in genai.list_models() 
+                                        if 'generateContent' in m.supported_generation_methods]
+                            raise Exception(
+                                f"Modelo '{self.gemini_model_name}' não encontrado. "
+                                f"Modelos disponíveis: {', '.join(available[:5])}"
+                            )
+                        except:
+                            raise Exception(f"Erro ao criar modelo '{self.gemini_model_name}': {e}")
+                
+                @property
+                def _llm_type(self) -> str:
+                    return "gemini"
+                
+                def _call(
+                    self,
+                    prompt: str,
+                    stop: Optional[List[str]] = None,
+                    run_manager: Optional[CallbackManagerForLLMRun] = None,
+                    **kwargs: Any,
+                ) -> str:
+                    try:
+                        # Configura parâmetros de geração
+                        generation_config = genai.types.GenerationConfig(
+                            temperature=0,
+                            max_output_tokens=4096,
+                            top_p=0.95,
+                            top_k=40
+                        )
+                        
+                        response = self.model.generate_content(
+                            prompt,
+                            generation_config=generation_config
+                        )
+                        
+                        # Extrai o texto da resposta de forma mais robusta
+                        text = None
+                        
+                        # Tenta diferentes formas de extrair o texto
+                        if hasattr(response, 'text') and response.text:
+                            text = response.text
+                        elif hasattr(response, 'candidates') and response.candidates:
+                            if len(response.candidates) > 0:
+                                candidate = response.candidates[0]
+                                if hasattr(candidate, 'content') and candidate.content:
+                                    if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                                        if len(candidate.content.parts) > 0:
+                                            text = candidate.content.parts[0].text
+                                    elif hasattr(candidate.content, 'text'):
+                                        text = candidate.content.text
+                        elif hasattr(response, 'parts') and response.parts:
+                            if len(response.parts) > 0:
+                                text = response.parts[0].text
+                        
+                        # Se não conseguiu extrair, tenta converter para string
+                        if not text:
+                            text = str(response)
+                        
+                        # Limpa a resposta removendo caracteres problemáticos
+                        if text:
+                            text = text.strip()
+                            # Remove possíveis prefixos/sufixos indesejados
+                            if text.startswith("```"):
+                                # Remove blocos de código markdown se não for necessário
+                                pass
+                        
+                        return text if text else "Resposta vazia do modelo."
+                    except Exception as e:
+                        error_msg = str(e)
+                        # Se o modelo não for encontrado, sugere modelos disponíveis
+                        if "404" in error_msg or "não foi encontrado" in error_msg.lower() or "not found" in error_msg.lower():
+                            try:
+                                genai.configure(api_key=self.gemini_api_key)
+                                available_models = [m.name.replace('models/', '') for m in genai.list_models() 
+                                                   if 'generateContent' in m.supported_generation_methods]
+                                raise Exception(
+                                    f"Modelo '{self.gemini_model_name}' não encontrado. "
+                                    f"Modelos disponíveis: {', '.join(available_models[:5])}. "
+                                    f"Atualize GEMINI_MODEL no arquivo .env"
+                                )
+                            except Exception as inner_e:
+                                if "Modelo" in str(inner_e):
+                                    raise inner_e
+                                raise Exception(
+                                    f"Modelo '{self.gemini_model_name}' não encontrado. "
+                                    f"Tente usar: gemini-2.5-flash, gemini-2.0-flash, ou gemini-2.5-pro"
+                                )
+                        raise
+            
+            return GeminiLLM(gemini_model_name=model_name, gemini_api_key=api_key)
+            
+        except ImportError as e:
+            raise ImportError(f"Para usar Gemini, instale: pip install google-generativeai. Erro: {e}")
+        except Exception as e:
+            raise Exception(f"Erro ao inicializar Gemini: {e}")
     
-    # Remove duplicatas e ordena por relevância
-    topicos_unicos = {}
-    for topico, score in topicos_encontrados:
-        if topico not in topicos_unicos or score > topicos_unicos[topico]:
-            topicos_unicos[topico] = score
-    
-    return sorted(topicos_unicos.items(), key=lambda x: x[1], reverse=True)
+    else:  # OpenAI (padrão)
+        try:
+            from langchain_openai import ChatOpenAI
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY não encontrada no arquivo .env")
+            model_name = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+            print(f"Usando OpenAI com modelo: {model_name}")
+            return ChatOpenAI(model=model_name, temperature=0)
+        except ImportError:
+            raise ImportError("Para usar OpenAI, instale: pip install langchain-openai")
+        except Exception as e:
+            raise Exception(f"Erro ao inicializar OpenAI: {e}")
 
-def extrair_intencao(mensagem):
-    """Extrai a intenção da mensagem do usuário."""
-    mensagem_lower = mensagem.lower()
-    
-    # Padrões de intenção
-    intencoes = {
-        "saudacao": ["ola", "oi", "hello", "hi", "bom dia", "boa tarde", "boa noite", "e aí", "eai"],
-        "pergunta": ["como", "what", "quando", "onde", "por que", "porque", "qual", "quais", "?"],
-        "explicacao": ["explicar", "explica", "o que é", "definir", "significa", "conceito"],
-        "procedimento": ["como fazer", "passo a passo", "processo", "implementar", "aplicar", "executar"],
-        "problema": ["problema", "erro", "falha", "não funciona", "nao funciona", "dificuldade", "dúvida"],
-        "despedida": ["tchau", "bye", "até logo", "obrigado", "obrigada", "valeu", "obrigado", "obrigada"],
-        "ajuda": ["ajuda", "help", "dúvida", "duvida", "não sei", "nao sei", "socorro"]
-    }
-    
-    for intencao, palavras in intencoes.items():
-        if any(palavra in mensagem_lower for palavra in palavras):
-            return intencao
-    
-    return "geral"
+def criar_agente_pandas():
+    """
+    Cria e retorna o agente LangChain para consultas em DataFrame Pandas.
+    """
+    try:
+        # 1. Carregar o DataFrame
+        df = pd.read_csv(CSV_FILE_PATH)
+        
+        # 2. Inicializar o LLM baseado no provedor configurado
+        llm = criar_llm()
+        
+        # 3. Criar o agente Pandas
+        # O agente utiliza o LLM e o DataFrame para responder perguntas.
+        # verbose=True é importante para mostrar o raciocínio (código Python gerado)
+        agent = create_pandas_dataframe_agent(
+            llm,
+            df,
+            verbose=True,
+            allow_dangerous_code=True,
+            max_iterations=5,
+            max_execution_time=60
+        )
+        
+        return agent
 
-def gerar_resposta_contextual(mensagem, contexto=""):
-    """Gera resposta baseada no contexto da conversa."""
-    # Analisa o contexto para entender melhor a conversa
-    if contexto:
-        contexto_lower = contexto.lower()
-        # Se há menção a LGPD no contexto, prioriza respostas sobre LGPD
-        if "lgpd" in contexto_lower:
-            return "Continuando sobre LGPD, posso esclarecer outros aspectos específicos. O que gostaria de saber?"
-        elif "qualidade" in contexto_lower:
-            return "Sobre qualidade de dados, posso detalhar outros aspectos. Qual sua dúvida específica?"
-    
-    return None
+    except FileNotFoundError:
+        print(f"Erro: Arquivo CSV não encontrado em {CSV_FILE_PATH}")
+        return None
+    except Exception as e:
+        print(f"Erro ao inicializar o agente: {e}")
+        return None
 
-def gerar_resposta(mensagem, contexto=''):
-    """Gera uma resposta inteligente baseada em análise semântica e contexto."""
+# Inicializa o agente uma vez
+pandas_agent = criar_agente_pandas()
+
+def gerar_resposta(pergunta: str):
+    """
+    Recebe uma pergunta e retorna a resposta do agente e o raciocínio.
     
-    logging.info(f"Processando mensagem: {mensagem}")
+    Args:
+        pergunta: A pergunta do usuário.
+        
+    Returns:
+        Uma tupla (resposta, raciocínio).
+    """
+    if pandas_agent is None:
+        return "O agente não pôde ser inicializado. Verifique o arquivo CSV e a chave da API.", ""
+
+    # O LangChain executa a cadeia e retorna o resultado.
+    # Para obter o raciocínio (código Python gerado), precisamos inspecionar a saída
+    # do `verbose=True` ou usar um callback. Como o `create_pandas_dataframe_agent`
+    # é uma abstração, vamos focar na resposta final e instruir o LLM a incluir
+    # o raciocínio na resposta.
+    
+    # Adicionamos uma instrução ao prompt para que o agente inclua o código Python
+    # que ele usou para chegar à resposta.
+    prompt_com_instrucao = (
+        f"{pergunta}\n\n"
+        "IMPORTANTE: Depois de responder à pergunta, inclua o código Python completo "
+        "que você gerou e executou para obter a resposta, formatado em um bloco de código "
+        "Markdown (```python...```). Se a resposta for trivial e não envolver código, "
+        "apenas responda à pergunta."
+    )
     
     try:
-        # Primeiro, tenta resposta contextual
-        resposta_contextual = gerar_resposta_contextual(mensagem, contexto)
-        if resposta_contextual:
-            novo_contexto = f"{limpar_contexto(contexto)}\nUsuário: {mensagem}\nChat Governança: {resposta_contextual}\n"
-            logging.info(f"Resposta contextual gerada: {resposta_contextual}")
-            return resposta_contextual, novo_contexto
+        # A chamada `agent.invoke` retorna um dicionário com a chave 'output'
+        response = pandas_agent.invoke({"input": prompt_com_instrucao})
         
-        # Extrai intenção da mensagem
-        intencao = extrair_intencao(mensagem)
-        logging.info(f"Intenção detectada: {intencao}")
+        # Extrai a resposta do output
+        resposta_completa = response.get("output", "Não foi possível obter uma resposta.")
         
-        # Encontra tópicos relevantes
-        topicos = encontrar_topicos_relevantes(mensagem)
-        logging.info(f"Tópicos encontrados: {topicos}")
+        # Se houver intermediate_steps, tenta extrair o código executado
+        raciocinio = ""
+        if "intermediate_steps" in response:
+            for step in response["intermediate_steps"]:
+                if len(step) >= 2 and hasattr(step[0], 'tool_input'):
+                    tool_input = step[0].tool_input
+                    if isinstance(tool_input, str) and 'python' in tool_input.lower():
+                        raciocinio += tool_input + "\n\n"
         
-        # Gera resposta baseada na intenção e tópicos
-        resposta_final = gerar_resposta_inteligente_v2(mensagem, intencao, topicos)
-
-        # Atualiza o contexto para a próxima rodada
-        novo_contexto = f"{limpar_contexto(contexto)}\nUsuário: {mensagem}\nChat Governança: {resposta_final}\n"
-
-        logging.info(f"Resposta gerada: {resposta_final}")
-        return resposta_final, novo_contexto
-
-    except Exception as e:
-        logging.error(f"Erro ao gerar resposta: {e}")
-        # Fallback para resposta básica
-        resposta_fallback = "Desculpe, ocorreu um problema. Tente reformular sua pergunta."
-        return resposta_fallback, contexto
-
-def gerar_resposta_inteligente_v2(mensagem, intencao, topicos):
-    """Gera respostas inteligentes usando análise semântica avançada."""
-    mensagem_lower = mensagem.lower().strip()
-    
-    # Respostas baseadas na intenção
-    if intencao == "saudacao":
-        saudacoes = [
-            "Olá! Sou o Chat Governança, especializado em governança de dados. Como posso ajudá-lo hoje?",
-            "Oi! Estou aqui para auxiliar com questões de dados, políticas e compliance. Em que posso ser útil?",
-            "Bom dia! Sou especialista em governança de dados. Qual sua necessidade específica?",
-            "Olá! Posso ajudar com LGPD, qualidade de dados, segurança e compliance. O que gostaria de saber?"
-        ]
-        return random.choice(saudacoes)
-    
-    elif intencao == "despedida":
-        despedidas = [
-            "Foi um prazer ajudar! Estou sempre disponível para questões de governança de dados.",
-            "De nada! Volte sempre que precisar de auxílio com dados e compliance.",
-            "Por nada! Qualquer dúvida sobre governança de dados, estou aqui.",
-            "Disponha! Estou sempre pronto para auxiliar com políticas e qualidade de dados."
-        ]
-        return random.choice(despedidas)
-    
-    elif intencao == "ajuda":
-        respostas_ajuda = [
-            "Posso ajudar com: LGPD, qualidade de dados, segurança, compliance, catálogo de dados e políticas. Seja específico na sua pergunta para melhor atendimento.",
-            "Sou especialista em governança de dados. Faça perguntas sobre: políticas, qualidade, segurança, LGPD ou compliance.",
-            "Posso auxiliar em: classificação de dados, controle de acesso, qualidade, compliance e regulamentações. Qual sua necessidade específica?",
-            "Estou aqui para ajudar com governança de dados. Para melhor atendimento, seja específico sobre sua dúvida."
-        ]
-        return random.choice(respostas_ajuda)
-    
-    # Respostas baseadas nos tópicos encontrados
-    if topicos:
-        topico_principal = topicos[0][0]
-        score = topicos[0][1]
+        # Tentativa de separar a resposta do código (raciocínio)
+        # O código estará dentro de ```python...```
+        import re
+        match = re.search(r"```python\n(.*?)```", resposta_completa, re.DOTALL)
         
-        if score > 0.7:  # Alta confiança
-            respostas = BASE_CONHECIMENTO[topico_principal]["respostas"]
-            resposta_base = random.choice(respostas)
+        if match:
+            raciocinio = match.group(1).strip()
+            # Remove o bloco de código da resposta final para o usuário
+            resposta_final = resposta_completa.replace(match.group(0), "").strip()
+        else:
+            resposta_final = resposta_completa
+            if not raciocinio:
+                raciocinio = "O agente não forneceu o código Python para esta consulta."
             
-            # Personaliza baseada na intenção
-            if intencao == "explicacao":
-                return f"Vou explicar sobre {topico_principal.replace('_', ' ')}: {resposta_base}"
-            elif intencao == "procedimento":
-                return f"Para implementar {topico_principal.replace('_', ' ')}: {resposta_base}"
-            elif intencao == "pergunta":
-                return f"Sobre {topico_principal.replace('_', ' ')}: {resposta_base}"
-            else:
-                return resposta_base
-    
-    # Respostas específicas para perguntas comuns
-    if any(palavra in mensagem_lower for palavra in ['o que é', 'definir', 'significa']):
-        if any(palavra in mensagem_lower for palavra in ['lgpd', 'lei geral']):
-            return "LGPD é a Lei Geral de Proteção de Dados (Lei 13.709/2018) que estabelece regras sobre coleta, armazenamento e uso de dados pessoais no Brasil. Principais pontos: consentimento explícito, finalidade específica, minimização de dados e direito ao esquecimento."
-        elif any(palavra in mensagem_lower for palavra in ['governança', 'governanca']):
-            return "Governança de dados é o conjunto de políticas, processos e tecnologias que garantem o uso adequado, seguro e eficiente dos dados organizacionais. Inclui: estrutura organizacional, políticas claras, controles de qualidade e segurança."
-        elif any(palavra in mensagem_lower for palavra in ['qualidade']):
-            return "Qualidade de dados refere-se à precisão, completude, consistência e atualidade das informações. Envolve: validação na entrada, limpeza de dados, padronização e monitoramento contínuo."
-    
-    elif any(palavra in mensagem_lower for palavra in ['como implementar', 'como fazer', 'passo a passo', 'implementar']):
-        if any(palavra in mensagem_lower for palavra in ['lgpd']):
-            return "Para implementar LGPD: 1) Mapeie todos os dados pessoais, 2) Classifique por sensibilidade, 3) Documente finalidades, 4) Implemente controles de acesso, 5) Estabeleça processo de resposta a incidentes, 6) Treine a equipe."
-        elif any(palavra in mensagem_lower for palavra in ['governança', 'governanca']):
-            return "Para implementar governança: 1) Crie comitê de dados, 2) Defina responsabilidades (owner, steward), 3) Estabeleça políticas, 4) Implemente catálogo de dados, 5) Monitore compliance, 6) Treine equipes."
-    
-    # Melhorar detecção de perguntas sobre governança
-    elif any(palavra in mensagem_lower for palavra in ['governança', 'governanca']) and intencao == "explicacao":
-        return "Governança de dados é o conjunto de políticas, processos e tecnologias que garantem o uso adequado, seguro e eficiente dos dados organizacionais. Inclui: estrutura organizacional, políticas claras, controles de qualidade e segurança."
-    
-    # Resposta padrão inteligente
-    respostas_padrao = [
-        "Interessante pergunta! Posso ajudar melhor se você for mais específico sobre governança de dados, LGPD, qualidade ou segurança.",
-        "Entendi sua mensagem. Para melhor atendimento, seja mais específico sobre sua necessidade em governança de dados.",
-        "Posso ajudar com governança de dados, LGPD, qualidade, segurança ou compliance. Qual sua dúvida específica?",
-        "Sou especialista em governança de dados. Como posso ser mais útil para você? Seja específico na sua pergunta.",
-        "Para melhor atendimento, faça perguntas mais específicas sobre dados, políticas ou compliance."
-    ]
-    return random.choice(respostas_padrao)
+        return resposta_final, raciocinio
+        
+    except Exception as e:
+        error_msg = str(e)
+        print(f"Erro durante a invocação do agente: {error_msg}")
+        
+        # Tratamento para erros de parsing - tenta extrair a resposta mesmo assim
+        if "OUTPUT_PARSING_FAILURE" in error_msg or "parsing error" in error_msg.lower() or "parse-able action" in error_msg.lower() or "Parsing LLM output" in error_msg or "Could not parse LLM output" in error_msg:
+            # Tenta extrair a resposta final do erro
+            import re
+            
+            # Procura por "Final Answer:" na mensagem de erro
+            final_answer_match = re.search(r"Final Answer:\s*(.+?)(?:\n\n|Resposta:|```|$)", error_msg, re.IGNORECASE | re.DOTALL)
+            if not final_answer_match:
+                # Tenta procurar por "Resposta:"
+                final_answer_match = re.search(r"Resposta:\s*(.+?)(?:\n\n|```|$)", error_msg, re.IGNORECASE | re.DOTALL)
+            
+            # Se não encontrou "Final Answer" ou "Resposta", tenta extrair do output direto
+            if not final_answer_match:
+                # Procura por texto entre backticks (resposta do LLM)
+                output_match = re.search(r"Could not parse LLM output: `(.+?)`", error_msg, re.DOTALL)
+                if output_match:
+                    resposta_final = output_match.group(1).strip()
+                    # Se é uma resposta simples (saudação), retorna ela
+                    if resposta_final and len(resposta_final) < 200:
+                        return resposta_final, ""
+            
+            if final_answer_match:
+                resposta_final = final_answer_match.group(1).strip()
+                # Remove código markdown e informações técnicas
+                resposta_final = re.sub(r'```python.*?```', '', resposta_final, flags=re.DOTALL).strip()
+                resposta_final = re.sub(r'For troubleshooting.*', '', resposta_final, flags=re.DOTALL).strip()
+                
+                # Tenta extrair o código executado
+                raciocinio = ""
+                # Procura por "Action Input:" que contém o código
+                action_input_match = re.search(r"Action Input:\s*(.+?)(?:\n|Observation:|Thought:|$)", error_msg, re.DOTALL)
+                if action_input_match:
+                    raciocinio = action_input_match.group(1).strip()
+                else:
+                    # Tenta extrair de blocos de código markdown
+                    code_match = re.search(r"```python\n(.*?)```", error_msg, re.DOTALL)
+                    if code_match:
+                        raciocinio = code_match.group(1).strip()
+                    else:
+                        raciocinio = ""
+                
+                return resposta_final, raciocinio
+        
+        # Tratamento específico para erros de quota da API
+        if "429" in error_msg or "quota" in error_msg.lower() or "insufficient_quota" in error_msg.lower():
+            mensagem = (
+                "⚠️ **Erro de Quota da API OpenAI**\n\n"
+                "A quota da sua conta OpenAI foi excedida.\n\n"
+                "**💡 Soluções GRATUITAS:**\n\n"
+                "1. **Ollama (100% Gratuito, roda localmente):**\n"
+                "   - Instale: https://ollama.ai/\n"
+                "   - Baixe um modelo: `ollama pull llama3.2`\n"
+                "   - No arquivo `.env`, adicione: `LLM_PROVIDER=ollama`\n\n"
+                "2. **Google Gemini (Gratuito):**\n"
+                "   - Obtenha API key: https://makersuite.google.com/app/apikey\n"
+                "   - No arquivo `.env`, adicione:\n"
+                "     `LLM_PROVIDER=gemini`\n"
+                "     `GOOGLE_API_KEY=sua_chave_aqui`\n\n"
+                "**Ou resolva o problema da OpenAI:**\n"
+                "- Verifique sua conta: https://platform.openai.com/account/billing\n"
+                "- Adicione créditos ou aguarde o reset do limite"
+            )
+            return mensagem, ""
+        
+        # Tratamento para outros erros de API
+        if "401" in error_msg or "authentication" in error_msg.lower() or "invalid" in error_msg.lower():
+            mensagem = (
+                "🔑 **Erro de Autenticação da API**\n\n"
+                "A chave da API OpenAI é inválida ou expirou. Verifique:\n\n"
+                "1. Se a chave no arquivo `.env` está correta\n"
+                "2. Se a chave não expirou\n"
+                "3. Se a chave tem permissões adequadas\n\n"
+                "Gere uma nova chave em: https://platform.openai.com/api-keys"
+            )
+            return mensagem, ""
+        
+        # Erro genérico
+        mensagem = (
+            f"❌ **Erro ao processar sua pergunta**\n\n"
+            f"Detalhes do erro: {error_msg}\n\n"
+            "Por favor, tente novamente ou verifique sua conexão com a API da OpenAI."
+        )
+        return mensagem, ""
 
-def gerar_resposta_fallback(mensagem):
-    """Fallback para casos de erro - usa o sistema inteligente."""
-    intencao = extrair_intencao(mensagem)
-    topicos = encontrar_topicos_relevantes(mensagem)
-    return gerar_resposta_inteligente_v2(mensagem, intencao, topicos)
-
-# Execução local para testes no terminal
+# Exemplo de uso (opcional, para testes rápidos)
 if __name__ == "__main__":
-    contexto = ""
-    print("Chat Governança ativo! Digite sua mensagem. (digite 'sair' para encerrar)")
-    while True:
-        user_msg = input("Você: ")
-        if user_msg.lower().strip() in ["sair", "exit", "fim"]:
-            print("Chat Governança: Encerrando sessão. Até logo!")
-            break
-        resposta, contexto = gerar_resposta(user_msg, contexto)
-        print(f"Chat Governança: {resposta}")
+    print("Agente Pandas inicializado. Testando...")
+    # Certifique-se de que o arquivo 'data.csv' existe para este teste
+    if os.path.exists(CSV_FILE_PATH):
+        resposta, raciocinio = gerar_resposta("Quantas linhas e colunas o DataFrame possui?")
+        print("\n--- Resposta ---")
+        print(resposta)
+        print("\n--- Raciocínio (Código Python) ---")
+        print(raciocinio)
+    else:
+        print(f"O arquivo {CSV_FILE_PATH} não foi encontrado. Não é possível testar.")

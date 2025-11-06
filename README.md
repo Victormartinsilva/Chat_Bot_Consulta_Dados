@@ -1,157 +1,166 @@
-# Chat Governança - Chatbot Profissional
+# 🤖 Chatbot de Consulta de Dados
 
-Um chatbot inteligente para governança de dados, desenvolvido com Flask e sistema de respostas baseado em palavras-chave, com interface profissional e moderna.
+Um chatbot inteligente desenvolvido com **Streamlit**, **LangChain** e **Pandas** para responder perguntas sobre dados em linguagem natural.
 
-## 🌐 **Demo Online**
+## ✨ Funcionalidades
 
-**🚀 [Teste o Chatbot Aqui](https://chat-bot-7g95.onrender.com/)**
+- 💬 Interface de chat intuitiva e moderna
+- 📊 Análise de dados em linguagem natural
+- 🐍 Geração automática de código Python para análise
+- 🔄 Suporte a múltiplos provedores LLM:
+  - **OpenAI** (GPT-3.5, GPT-4)
+  - **Google Gemini** (gratuito)
+  - **Ollama** (gratuito, local)
 
-[![Deploy Status](https://img.shields.io/badge/Deploy-Render-green)](https://chat-bot-7g95.onrender.com/)
-[![Python](https://img.shields.io/badge/Python-3.11+-blue)](https://python.org)
-[![Flask](https://img.shields.io/badge/Flask-2.3+-red)](https://flask.palletsprojects.com)
+## 🚀 Deploy no Streamlit Cloud
 
-## 🚀 Instalação e Execução
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io)
 
-### Pré-requisitos
-- Python 3.8 ou superior
-- pip (gerenciador de pacotes Python)
+## 📋 Pré-requisitos
 
-### Passos para Executar
+- Python 3.8+
+- pip
+- Arquivo CSV com dados (`data.csv`)
+
+## 🔧 Instalação Local
 
 1. **Clone o repositório:**
    ```bash
-   git clone https://github.com/SEU_USUARIO/Chat_Bot.git
-   cd Chat_Bot
+   git clone https://github.com/Victormartinsilva/Chat_Bot_Consulta_Dados.git
+   cd Chat_Bot_Consulta_Dados/Chat_Bot/Chat_Bot
    ```
 
-2. **Instalar dependências:**
+2. **Instale as dependências:**
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Executar o chatbot:**
+3. **Configure as variáveis de ambiente:**
+   Crie um arquivo `.env` na raiz do projeto:
+   ```env
+   LLM_PROVIDER=gemini
+   GOOGLE_API_KEY=sua_chave_aqui
+   GEMINI_MODEL=gemini-2.5-flash
+   ```
+
+4. **Coloque seu arquivo CSV:**
+   - Renomeie seu arquivo para `data.csv`
+   - Coloque na mesma pasta do `app.py`
+
+5. **Execute a aplicação:**
    ```bash
-   python app.py
+   streamlit run app.py
    ```
 
-4. **Acessar o chatbot:**
-   - Abra seu navegador
-   - Vá para: `http://localhost:5000`
+## ⚙️ Configuração dos Provedores LLM
 
-## 🌐 Deploy no GitHub Pages / Heroku / Railway
+### Google Gemini (Recomendado - Gratuito)
 
-### Opção 1: Heroku (Recomendado)
-
-1. **Instale o Heroku CLI** e faça login
-2. **Crie um arquivo `Procfile`:**
-   ```
-   web: python app.py
-   ```
-3. **Configure as variáveis de ambiente** no Heroku
-4. **Deploy:**
-   ```bash
-   git add .
-   git commit -m "Deploy para Heroku"
-   heroku create seu-chat-governanca
-   git push heroku main
+1. Obtenha sua API key em: https://makersuite.google.com/app/apikey
+2. Configure no `.env`:
+   ```env
+   LLM_PROVIDER=gemini
+   GOOGLE_API_KEY=sua_chave_aqui
+   GEMINI_MODEL=gemini-2.5-flash
    ```
 
-### Opção 2: Railway
+### OpenAI
 
-1. **Conecte seu repositório** no Railway
-2. **Configure as variáveis** de ambiente
-3. **Deploy automático** a cada push
-
-### Opção 3: Render ✅ **USADO NESTE PROJETO**
-
-1. **Conecte o repositório** no [Render](https://render.com)
-2. **Configure o build command:** `pip install -r requirements.txt`
-3. **Configure o start command:** `python app.py`
-4. **Resultado:** [https://chat-bot-7g95.onrender.com/](https://chat-bot-7g95.onrender.com/)
-
-**✅ Deploy realizado com sucesso no Render!**
-
-## 🎯 Funcionalidades
-
-- Interface web responsiva com design profissional
-- Respostas inteligentes baseadas em palavras-chave
-- Chat sempre inicia limpo (sem histórico anterior)
-- Conversas armazenadas apenas na sessão atual
-- Indicador de carregamento durante processamento
-- Design corporativo adequado para governança de dados
-
-## 🛠️ Solução de Problemas
-
-### Modelo não carrega
-Se o modelo GPT-2 em português não carregar, o sistema automaticamente:
-1. Tenta carregar o modelo GPT-2 padrão em inglês
-2. Se ambos falharem, usa respostas pré-definidas
-
-### Erro de dependências
-Execute novamente:
-```bash
-pip install -r requirements.txt --upgrade
-```
-
-### Chatbot não responde corretamente
-Se o chatbot não estiver respondendo com as respostas inteligentes:
-
-1. **Limpe o cache do navegador:**
-   - Pressione `Ctrl + Shift + R` (Windows) ou `Cmd + Shift + R` (Mac)
-   - Ou pressione `F12` e clique com botão direito no botão de atualizar → "Esvaziar cache e recarregar forçado"
-
-2. **Verifique se o servidor está rodando:**
-   ```bash
-   python app.py
+1. Obtenha sua API key em: https://platform.openai.com/api-keys
+2. Configure no `.env`:
+   ```env
+   LLM_PROVIDER=openai
+   OPENAI_API_KEY=sua_chave_aqui
+   OPENAI_MODEL=gpt-3.5-turbo
    ```
 
-3. **Teste a API diretamente:**
-   ```bash
-   # No PowerShell
-   Invoke-WebRequest -Uri "http://localhost:5000/responder" -Method POST -ContentType "application/json" -Body '{"mensagem": "oi"}'
-   ```
+### Ollama (Local)
 
-### Porta ocupada
-Se a porta 5000 estiver ocupada, altere no arquivo `app.py`:
-```python
-app.run(host="0.0.0.0", port=5001, debug=False)  # Mude para 5001 ou outra porta
-```
+1. Instale o Ollama: https://ollama.ai
+2. Baixe um modelo: `ollama pull llama3.2`
+3. Configure no `.env`:
+   ```env
+   LLM_PROVIDER=ollama
+   OLLAMA_MODEL=llama3.2
+   OLLAMA_BASE_URL=http://localhost:11434
+   ```
 
 ## 📁 Estrutura do Projeto
 
 ```
-Chat_Bot/
-├── app.py              # Aplicação Flask principal
-├── chatbot.py          # Lógica do chatbot com GPT-2
-├── requirements.txt    # Dependências Python
-├── templates/
-│   └── index.html     # Interface web
-├── static/
-│   └── chat-governanca-avatar.png
-└── README.md          # Este arquivo
+Chat_Bot_Consulta_Dados/
+├── Chat_Bot/
+│   └── Chat_Bot/
+│       ├── app.py                    # Aplicação Streamlit principal
+│       ├── chatbot.py                # Lógica do agente LangChain
+│       ├── requirements.txt          # Dependências Python
+│       ├── data.csv                  # Arquivo de dados (não versionado)
+│       ├── .env                      # Variáveis de ambiente (não versionado)
+│       ├── README.md                 # Este arquivo
+│       └── .gitignore                # Arquivos ignorados pelo Git
 ```
 
-## 📊 Sobre o Chat Governança
+## 🌐 Deploy no Streamlit Cloud
 
-O Chat Governança é uma solução profissional de chatbot desenvolvida para ambientes corporativos e governança de dados. Com interface moderna e design limpo, oferece uma experiência de usuário profissional e eficiente para consultas e interações empresariais.
+### Passo 1: Preparar o Repositório
 
-### 🎯 Características Técnicas
+1. Certifique-se de que todos os arquivos estão commitados
+2. Faça push para o GitHub
 
-- **Framework:** Flask (Python)
-- **Frontend:** HTML5, CSS3, JavaScript
-- **Sistema de Respostas:** Baseado em palavras-chave inteligentes
-- **Design:** Interface corporativa responsiva
-- **Deploy:** Pronto para Heroku, Railway, Render
+### Passo 2: Conectar ao Streamlit Cloud
 
-## 🤝 Contribuição
+1. Acesse: https://share.streamlit.io/
+2. Faça login com sua conta GitHub
+3. Clique em "New app"
+4. Selecione seu repositório: `Victormartinsilva/Chat_Bot_Consulta_Dados`
+5. Configure:
+   - **Main file path:** `Chat_Bot/Chat_Bot/app.py`
+   - **Python version:** 3.11
 
-1. Fork o projeto
-2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
-3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4. Push para a branch (`git push origin feature/AmazingFeature`)
-5. Abra um Pull Request
+### Passo 3: Configurar Secrets
 
-## 📝 Licença
+No Streamlit Cloud, vá em "Settings" → "Secrets" e adicione:
+
+```toml
+LLM_PROVIDER = "gemini"
+GOOGLE_API_KEY = "sua_chave_aqui"
+GEMINI_MODEL = "gemini-2.5-flash"
+```
+
+### Passo 4: Fazer Upload do CSV
+
+1. No Streamlit Cloud, vá em "Settings" → "Files"
+2. Faça upload do arquivo `data.csv`
+
+**OU** configure para ler de uma URL:
+
+```python
+# No app.py, adicione suporte para URL
+CSV_URL = st.secrets.get("CSV_URL", None)
+if CSV_URL:
+    df = pd.read_csv(CSV_URL)
+else:
+    df = pd.read_csv("data.csv")
+```
+
+## 📝 Exemplos de Uso
+
+- "Quantas linhas tem o DataFrame?"
+- "Quais são as colunas disponíveis?"
+- "Mostre os 10 primeiros registros"
+- "Qual é a média da coluna X?"
+- "Quantos valores únicos existem na coluna Y?"
+
+## 🛠️ Tecnologias Utilizadas
+
+- **Streamlit** - Framework web para Python
+- **LangChain** - Framework para aplicações LLM
+- **Pandas** - Manipulação e análise de dados
+- **Google Gemini API** - Modelo de linguagem
+- **OpenAI API** - Modelo de linguagem (alternativa)
+- **Ollama** - Modelo de linguagem local (alternativa)
+
+## 📄 Licença
 
 Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
 
@@ -159,6 +168,8 @@ Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para ma
 
 **Victor Silva**
 - GitHub: [@Victormartinsilva](https://github.com/Victormartinsilva)
-- Projeto: [Chat_Bot Repository](https://github.com/Victormartinsilva/Chat_Bot)
-- Demo: [https://chat-bot-7g95.onrender.com/](https://chat-bot-7g95.onrender.com/)
+- Repositório: [Chat_Bot_Consulta_Dados](https://github.com/Victormartinsilva/Chat_Bot_Consulta_Dados)
 
+## 🤝 Contribuições
+
+Contribuições são bem-vindas! Sinta-se à vontade para abrir issues ou pull requests.

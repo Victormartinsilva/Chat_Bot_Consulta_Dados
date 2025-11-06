@@ -1,2 +1,12 @@
-Flask==2.3.3
-requests==2.31.0
+streamlit
+pandas
+langchain>=0.3.0
+langchain-openai>=0.2.0
+langchain-experimental>=0.3.0
+langchain-community>=0.3.0
+langchain-google-genai
+openai
+python-dotenv
+torch>=2.7.0
+transformers
+tabulate
