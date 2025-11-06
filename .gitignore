@@ -149,10 +149,6 @@ streamlit.log
 # Streamlit
 .streamlit/secrets.toml
 
-# Dados sensíveis - NÃO versionar arquivos CSV com dados reais
-# data.csv  # Descomente se não quiser versionar o CSV
-*.csv
-!example_data.csv
 
 # Build files
 build/
